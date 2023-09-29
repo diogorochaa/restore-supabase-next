@@ -50,14 +50,11 @@ export default function CreateAccountForm() {
       } = await supabase.auth.signUp({
         email,
         password,
-        // options: {
-        //   emailRedirectTo: `${location.origin}/auth/callback`,
-        // },
       })
 
       if (user) {
         form.reset()
-        // router.push('/')
+
         router.refresh()
       }
     } catch (e) {
