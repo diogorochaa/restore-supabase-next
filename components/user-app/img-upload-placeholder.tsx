@@ -12,6 +12,8 @@ import {
   DialogTrigger,
 } from '../ui/dialog'
 import { useDropzone } from 'react-dropzone'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { set } from 'zod'
 
 interface FilePreview {
   file: Blob
@@ -19,6 +21,8 @@ interface FilePreview {
 }
 
 export function ImageUpĺoadPlaceholder() {
+  const [isMounted, setIsMounted] = useState(false)
+
   const [file, setFile] = useState<FilePreview | null>(null)
   const [fileToProcess, setFileToProcess] = useState<{ path: string } | null>(
     null,
@@ -32,12 +36,24 @@ export function ImageUpĺoadPlaceholder() {
         file,
         preview: URL.createObjectURL(file),
       })
+
+      const supabase = createClientComponentClient()
+      const { data, error } = await supabase.storage
+        .from(process.env.NEXT_PUBLIC_SUPABASE_APP_BUCKET_IMAGE_FOLDER)
+        .upload(
+          `${process.env.NEXT_PUBLIC_SUPABASE_APP_BUCKET_IMAGE_FOLDER_PROCESSING}/${acceptedFiles[0].name}`,
+          acceptedFiles[0],
+        )
+      if (!error) {
+        setFileToProcess(data)
+      }
     } catch (error) {
       console.log('ondrop', error)
     }
   }, [])
 
   useEffect(() => {
+    setIsMounted(true)
     return () => {
       if (file) {
         URL.revokeObjectURL(file.preview)
@@ -58,6 +74,41 @@ export function ImageUpĺoadPlaceholder() {
 
   const handleDialogOpenChange = async (open: boolean) => {
     console.log('Dialog opened')
+  }
+
+  const handleEnhance = async () => {
+    try {
+      const supabase = createClientComponentClient()
+      const {
+        data: { publicUrl },
+      } = await supabase.storage
+        .from(process.env.NEXT_PUBLIC_SUPABASE_APP_BUCKET_IMAGE_FOLDER)
+        .getPublicUrl(`${fileToProcess?.path}`)
+
+      const res = await fetch('api/ai/replicate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ imageUrl: publicUrl }),
+      })
+      const restoredImageUrl = await res.json()
+
+      const readImageRes = await fetch(restoredImageUrl.data)
+
+      const imageBlob = await readImageRes.blob()
+
+      setRestoredFile({
+        file: imageBlob,
+        preview: URL.createObjectURL(imageBlob),
+      })
+    } catch (error) {
+      console.log('handleEnhance', error)
+    }
+  }
+
+  if (!isMounted) {
+    return null
   }
 
   return (
@@ -142,7 +193,7 @@ export function ImageUpĺoadPlaceholder() {
               </div>
             </div>
             <DialogFooter>
-              <Button>Enhance</Button>
+              <Button onClick={handleEnhance}>Enhance</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
